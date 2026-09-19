@@ -148,31 +148,26 @@ jobs:
             Format-List
 
       - name: Configure Core RDP Settings
-        shell: powershell
         run: |
-          # Enable Remote Desktop
+          # Enable Remote Desktop and disable Network Level Authentication (if needed)
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
                              -Name "fDenyTSConnections" -Value 0 -Force
-
-          # Disable Network Level Authentication
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
                              -Name "UserAuthentication" -Value 0 -Force
-
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
                              -Name "SecurityLayer" -Value 0 -Force
 
-          # Remove existing rule
+          # Remove any existing rule with the same name to avoid duplication
           netsh advfirewall firewall delete rule name="RDP-Tailscale"
 
-          # Allow RDP port
+          # For testing, allow any incoming connection on port 3389
           netsh advfirewall firewall add rule name="RDP-Tailscale" `
             dir=in action=allow protocol=TCP localport=3389
 
-          # Restart Remote Desktop
+          # Restart the Remote Desktop service
           Restart-Service -Name TermService -Force
 
       - name: Create RDP User with Secure Password
-        shell: powershell
         run: |
           Add-Type -AssemblyName System.Security
 
@@ -207,107 +202,9 @@ jobs:
               exit 1
           }
 
-      # ============================================
-      # CONFIGURAÇÃO DO D:
-      # ============================================
-      - name: Configurar D para jogos programas e arquivos pesados
-        shell: powershell
-        run: |
-          Write-Host "========================================"
-          Write-Host " CONFIGURANDO D: PARA ARQUIVOS PESADOS"
-          Write-Host "========================================"
-
-          # Criar pastas principais
-          New-Item -ItemType Directory -Force -Path "D:\Games" | Out-Null
-          New-Item -ItemType Directory -Force -Path "D:\Programs" | Out-Null
-          New-Item -ItemType Directory -Force -Path "D:\Downloads" | Out-Null
-          New-Item -ItemType Directory -Force -Path "D:\Files" | Out-Null
-          New-Item -ItemType Directory -Force -Path "D:\Temp" | Out-Null
-
-          # Pasta específica de downloads do usuário RDP
-          New-Item -ItemType Directory -Force -Path "D:\Downloads\RDP" | Out-Null
-
-          # Configurar TEMP e TMP do sistema para o D:
-          [Environment]::SetEnvironmentVariable(
-              "TEMP",
-              "D:\Temp",
-              "Machine"
-          )
-
-          [Environment]::SetEnvironmentVariable(
-              "TMP",
-              "D:\Temp",
-              "Machine"
-          )
-
-          # Variáveis também para a sessão atual
-          $env:TEMP = "D:\Temp"
-          $env:TMP = "D:\Temp"
-
-          # Criar atalhos na área de trabalho do usuário RDP
-          $desktop = "C:\Users\RDP\Desktop"
-
-          # O perfil pode ainda não existir; criar somente a pasta Desktop
-          New-Item -ItemType Directory -Force -Path $desktop | Out-Null
-
-          $WshShell = New-Object -ComObject WScript.Shell
-
-          # Atalho Jogos
-          $shortcut = $WshShell.CreateShortcut("$desktop\JOGOS - D.lnk")
-          $shortcut.TargetPath = "D:\Games"
-          $shortcut.WorkingDirectory = "D:\Games"
-          $shortcut.Description = "Jogos armazenados no disco D:"
-          $shortcut.Save()
-
-          # Atalho Programas
-          $shortcut = $WshShell.CreateShortcut("$desktop\PROGRAMAS - D.lnk")
-          $shortcut.TargetPath = "D:\Programs"
-          $shortcut.WorkingDirectory = "D:\Programs"
-          $shortcut.Description = "Programas armazenados no disco D:"
-          $shortcut.Save()
-
-          # Atalho Downloads
-          $shortcut = $WshShell.CreateShortcut("$desktop\DOWNLOADS - D.lnk")
-          $shortcut.TargetPath = "D:\Downloads"
-          $shortcut.WorkingDirectory = "D:\Downloads"
-          $shortcut.Description = "Downloads armazenados no disco D:"
-          $shortcut.Save()
-
-          # Atalho Arquivos
-          $shortcut = $WshShell.CreateShortcut("$desktop\ARQUIVOS - D.lnk")
-          $shortcut.TargetPath = "D:\Files"
-          $shortcut.WorkingDirectory = "D:\Files"
-          $shortcut.Description = "Arquivos armazenados no disco D:"
-          $shortcut.Save()
-
-          Write-Host ""
-          Write-Host "========================================"
-          Write-Host " D: CONFIGURADO COM SUCESSO"
-          Write-Host "========================================"
-          Write-Host "Jogos:      D:\Games"
-          Write-Host "Programas:  D:\Programs"
-          Write-Host "Downloads:  D:\Downloads"
-          Write-Host "Arquivos:   D:\Files"
-          Write-Host "Temporarios: D:\Temp"
-          Write-Host ""
-          Write-Host "TEMP atual: $env:TEMP"
-          Write-Host "TMP atual:  $env:TMP"
-          Write-Host "========================================"
-
-          # Mostrar espaço disponível no D:
-          Get-Volume -DriveLetter D |
-            Select-Object DriveLetter,
-              @{N="TamanhoGB";E={[math]::Round($_.Size / 1GB, 2)}},
-              @{N="LivreGB";E={[math]::Round($_.SizeRemaining / 1GB, 2)}},
-              @{N="UsadoGB";E={[math]::Round(($_.Size - $_.SizeRemaining) / 1GB, 2)}} |
-            Format-List
-
       - name: Install Tailscale
-        shell: powershell
         run: |
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
-
-          # Como TEMP foi movido para D:, o instalador será baixado para D:
           $installerPath = "$env:TEMP\tailscale.msi"
 
           Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
@@ -319,7 +216,6 @@ jobs:
           Remove-Item $installerPath -Force
 
       - name: Establish Tailscale Connection
-        shell: powershell
         run: |
           # Bring up Tailscale
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up `
@@ -349,7 +245,6 @@ jobs:
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
       - name: Verify RDP Accessibility
-        shell: powershell
         run: |
           Write-Host "Tailscale IP: $env:TAILSCALE_IP"
 
@@ -365,20 +260,11 @@ jobs:
           Write-Host "TCP connectivity successful!"
 
       - name: Maintain Connection
-        shell: powershell
         run: |
           Write-Host "`n=== RDP ACCESS ==="
           Write-Host "Address: $env:TAILSCALE_IP"
           Write-Host "Username: RDP"
           Write-Host "Password: $(echo $env:RDP_CREDS)"
-          Write-Host "==================`n"
-
-          Write-Host "=== STORAGE ==="
-          Write-Host "Jogos:       D:\Games"
-          Write-Host "Programas:   D:\Programs"
-          Write-Host "Downloads:   D:\Downloads"
-          Write-Host "Arquivos:    D:\Files"
-          Write-Host "Temporarios: D:\Temp"
           Write-Host "==================`n"
 
           # Keep runner active
