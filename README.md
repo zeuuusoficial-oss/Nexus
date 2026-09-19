@@ -1,64 +1,41 @@
 <div align="center">
 
-# ✦ NEXUS
+# ◈ unknown
 
-### ⚡ A lightweight automation environment
+### Virtual Infrastructure · Remote Environment · Security
 
-<p>
-  <img src="https://img.shields.io/badge/Status-Active-00D4FF?style=for-the-badge">
-  <img src="https://img.shields.io/badge/Automation-GitHub%20Actions-8B5CF6?style=for-the-badge">
-  <img src="https://img.shields.io/badge/Environment-Windows-0078D6?style=for-the-badge">
-</p>
+`PRIVATE PROJECT • CONTROLLED ENVIRONMENT`
+
+<br>
+
+[![Status](https://img.shields.io/badge/STATUS-ACTIVE-00ff9c?style=flat-square)]()
+[![Platform](https://img.shields.io/badge/PLATFORM-WINDOWS-0078D6?style=flat-square&logo=windows&logoColor=white)]()
+[![Automation](https://img.shields.io/badge/AUTOMATION-GITHUB_ACTIONS-2088FF?style=flat-square&logo=githubactions&logoColor=white)]()
+[![Network](https://img.shields.io/badge/NETWORK-TAILSCALE-242424?style=flat-square)]()
 
 </div>
 
 ---
 
-## 🌌 Overview
+## `01` — OVERVIEW
 
-**Nexus** is an automated environment designed around
-reproducible workflows, remote accessibility and flexible
+**Nexus** is a remotely accessible Windows virtual environment
+designed around automation, controlled networking and isolated
 resource management.
 
-> **Simple. Flexible. Connected.**
-
----
-
-## ✨ Features
-
-| Module | Description |
-|--------|-------------|
-| ⚡ **Automation** | Automated environment initialization |
-| 🔗 **Connectivity** | Secure network connectivity |
-| 💾 **Storage** | Organized workspace for files and applications |
-| 🛠️ **Configuration** | Automatic system configuration |
-| 📊 **Monitoring** | Hardware and environment information |
-
----
-
-## 🚀 Workflow
+The environment is provisioned automatically through a workflow,
+configured at runtime and exposed only through an authenticated
+network layer.
 
 ```text
-┌─────────────────────┐
-│       NEXUS         │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│   Initialization    │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│    Configuration    │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│     Connectivity    │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│     Environment     │
-└─────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                         SSSXXS                       │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│   AUTOMATION       NETWORK          ENVIRONMENT          │
+│       │               │                  │               │
+│       ▼               ▼                  ▼               │
+│   Provisioning    Authenticated      Windows           │
+│   Configuration  Connectivity       Workspace          │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
