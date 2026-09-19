@@ -1,0 +1,274 @@
+name: RDP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  secure-rdp:
+    runs-on: windows-latest
+    timeout-minutes: 8600
+
+    steps:
+      - name: Limpeza pesada do disco e mostrar configurações
+        shell: powershell
+        run: |
+          Write-Host "========================================"
+          Write-Host " CONFIGURAÇÕES DO RUNNER"
+          Write-Host "========================================"
+
+          Write-Host "`n--- SISTEMA ---"
+          Get-CimInstance Win32_OperatingSystem |
+            Select-Object Caption, Version, OSArchitecture |
+            Format-List
+
+          Write-Host "--- CPU ---"
+          Get-CimInstance Win32_Processor |
+            Select-Object Name, NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed |
+            Format-List
+
+          Write-Host "--- RAM ---"
+          $ram = Get-CimInstance Win32_ComputerSystem
+          Write-Host ("RAM total: {0:N2} GB" -f ($ram.TotalPhysicalMemory / 1GB))
+
+          Write-Host "`n--- GPU ---"
+          Get-CimInstance Win32_VideoController |
+            Select-Object Name,
+              @{N="VRAM_GB";E={
+                if ($_.AdapterRAM) {
+                  [math]::Round($_.AdapterRAM / 1GB, 2)
+                } else {
+                  "N/A"
+                }
+              }},
+              DriverVersion |
+            Format-List
+
+          Write-Host "--- DISCO ANTES DA LIMPEZA ---"
+          Get-Volume -DriveLetter C |
+            Select-Object DriveLetter,
+              @{N="TamanhoGB";E={[math]::Round($_.Size / 1GB, 2)}},
+              @{N="LivreGB";E={[math]::Round($_.SizeRemaining / 1GB, 2)}},
+              @{N="UsadoGB";E={[math]::Round(($_.Size - $_.SizeRemaining) / 1GB, 2)}} |
+            Format-List
+
+          Write-Host "`n========================================"
+          Write-Host " INICIANDO LIMPEZA PESADA"
+          Write-Host "========================================"
+
+          # Arquivos temporários do usuário
+          Remove-Item "$env:TEMP\*" `
+            -Recurse -Force -ErrorAction SilentlyContinue
+
+          # Arquivos temporários do Windows
+          Remove-Item "C:\Windows\Temp\*" `
+            -Recurse -Force -ErrorAction SilentlyContinue
+
+          # Cache do Windows Update
+          Stop-Service wuauserv -Force -ErrorAction SilentlyContinue
+          Remove-Item "C:\Windows\SoftwareDistribution\Download\*" `
+            -Recurse -Force -ErrorAction SilentlyContinue
+          Start-Service wuauserv -ErrorAction SilentlyContinue
+
+          # Relatórios de erro do Windows
+          Remove-Item "C:\ProgramData\Microsoft\Windows\WER\*" `
+            -Recurse -Force -ErrorAction SilentlyContinue
+
+          # Cache temporário do usuário
+          Remove-Item "$env:LOCALAPPDATA\Temp\*" `
+            -Recurse -Force -ErrorAction SilentlyContinue
+
+          # Cache do Chocolatey
+          if (Get-Command choco.exe -ErrorAction SilentlyContinue) {
+              choco clean --yes
+          }
+
+          # Cache do NuGet
+          if (Get-Command dotnet.exe -ErrorAction SilentlyContinue) {
+              dotnet nuget locals all --clear
+          }
+
+          # Cache do pip
+          if (Get-Command pip.exe -ErrorAction SilentlyContinue) {
+              pip cache purge
+          }
+
+          # Cache do npm
+          if (Get-Command npm.cmd -ErrorAction SilentlyContinue) {
+              npm cache clean --force
+          }
+
+          # Limpeza de componentes antigos do Windows
+          DISM.exe /Online /Cleanup-Image /StartComponentCleanup
+
+          # Limpeza do Gerenciador de Disco
+          cleanmgr.exe /verylowdisk
+
+          Write-Host "`n========================================"
+          Write-Host " RESULTADO DA LIMPEZA"
+          Write-Host "========================================"
+
+          Get-Volume -DriveLetter C |
+            Select-Object DriveLetter,
+              @{N="TamanhoGB";E={[math]::Round($_.Size / 1GB, 2)}},
+              @{N="LivreGB";E={[math]::Round($_.SizeRemaining / 1GB, 2)}},
+              @{N="UsadoGB";E={[math]::Round(($_.Size - $_.SizeRemaining) / 1GB, 2)}} |
+            Format-List
+
+          Write-Host "`n========================================"
+          Write-Host " CONFIGURAÇÕES FINAIS"
+          Write-Host "========================================"
+
+          Write-Host "`n--- CPU ---"
+          Get-CimInstance Win32_Processor |
+            Select-Object Name, NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed |
+            Format-List
+
+          Write-Host "--- RAM ---"
+          $ram = Get-CimInstance Win32_ComputerSystem
+          Write-Host ("RAM total: {0:N2} GB" -f ($ram.TotalPhysicalMemory / 1GB))
+
+          Write-Host "`n--- GPU ---"
+          Get-CimInstance Win32_VideoController |
+            Select-Object Name,
+              @{N="VRAM_GB";E={
+                if ($_.AdapterRAM) {
+                  [math]::Round($_.AdapterRAM / 1GB, 2)
+                } else {
+                  "N/A"
+                }
+              }},
+              DriverVersion |
+            Format-List
+
+          Write-Host "--- DISCO ---"
+          Get-Volume -DriveLetter C |
+            Select-Object DriveLetter,
+              @{N="TamanhoGB";E={[math]::Round($_.Size / 1GB, 2)}},
+              @{N="LivreGB";E={[math]::Round($_.SizeRemaining / 1GB, 2)}} |
+            Format-List
+
+      - name: Configure Core RDP Settings
+        run: |
+          # Enable Remote Desktop and disable Network Level Authentication (if needed)
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+                             -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+                             -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+                             -Name "SecurityLayer" -Value 0 -Force
+
+          # Remove any existing rule with the same name to avoid duplication
+          netsh advfirewall firewall delete rule name="RDP-Tailscale"
+
+          # For testing, allow any incoming connection on port 3389
+          netsh advfirewall firewall add rule name="RDP-Tailscale" `
+            dir=in action=allow protocol=TCP localport=3389
+
+          # Restart the Remote Desktop service
+          Restart-Service -Name TermService -Force
+
+      - name: Create RDP User with Secure Password
+        run: |
+          Add-Type -AssemblyName System.Security
+
+          $charSet = @{
+              Upper   = [char[]](65..90)
+              Lower   = [char[]](97..122)
+              Number  = [char[]](48..57)
+              Special = ([char[]](33..47) + [char[]](58..64) +
+                         [char[]](91..96) + [char[]](123..126))
+          }
+
+          $rawPassword = @()
+          $rawPassword += $charSet.Upper | Get-Random -Count 4
+          $rawPassword += $charSet.Lower | Get-Random -Count 4
+          $rawPassword += $charSet.Number | Get-Random -Count 4
+          $rawPassword += $charSet.Special | Get-Random -Count 4
+
+          $password = -join ($rawPassword | Sort-Object { Get-Random })
+          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
+
+          New-LocalUser -Name "RDP" `
+                        -Password $securePass `
+                        -AccountNeverExpires
+
+          Add-LocalGroupMember -Group "Administrators" -Member "RDP"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
+
+          echo "RDP_CREDS=User: RDP | Password: $password" >> $env:GITHUB_ENV
+
+          if (-not (Get-LocalUser -Name "RDP")) {
+              Write-Error "User creation failed"
+              exit 1
+          }
+
+      - name: Install Tailscale
+        run: |
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $installerPath = "$env:TEMP\tailscale.msi"
+
+          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
+
+          Start-Process msiexec.exe `
+            -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" `
+            -Wait
+
+          Remove-Item $installerPath -Force
+
+      - name: Establish Tailscale Connection
+        run: |
+          # Bring up Tailscale
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up `
+            --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} `
+            --hostname=gh-runner-$env:GITHUB_RUN_ID
+
+          # Wait for Tailscale to assign an IP
+          $tsIP = $null
+          $retries = 0
+
+          while (-not $tsIP -and $retries -lt 10) {
+              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+
+              if ($tsIP) {
+                  break
+              }
+
+              Start-Sleep -Seconds 5
+              $retries++
+          }
+
+          if (-not $tsIP) {
+              Write-Error "Tailscale IP not assigned. Exiting."
+              exit 1
+          }
+
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+
+      - name: Verify RDP Accessibility
+        run: |
+          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
+
+          $testResult = Test-NetConnection `
+            -ComputerName $env:TAILSCALE_IP `
+            -Port 3389
+
+          if (-not $testResult.TcpTestSucceeded) {
+              Write-Error "TCP connection to RDP port 3389 failed"
+              exit 1
+          }
+
+          Write-Host "TCP connectivity successful!"
+
+      - name: Maintain Connection
+        run: |
+          Write-Host "`n=== RDP ACCESS ==="
+          Write-Host "Address: $env:TAILSCALE_IP"
+          Write-Host "Username: RDP"
+          Write-Host "Password: $(echo $env:RDP_CREDS)"
+          Write-Host "==================`n"
+
+          # Keep runner active
+          while ($true) {
+              Write-Host "[$(Get-Date)] RDP Active"
+              Start-Sleep -Seconds 300
+          }
